@@ -1,0 +1,22 @@
+### resQ Amal - Sampel Data Struktur Google Sheets ###
+
+=== MASTER_USERS_LIST ===
+id, name, role, state, createdAt, spreadsheetId
+SA_GLOBAL_001, Ahmad Root, SuperAdmin, Global, 2025-01-01T08:00:00Z, ss_sa_001
+MECC_SEL_001, Siti Admin, MECC, Selangor, 2025-01-02T09:00:00Z, ss_mecc_sel_001
+AJK_SEL_102, Wan Center, AJK, Selangor, 2025-01-02T10:00:00Z, ss_ajk_sel_102
+PIC_SEL_201, Bob Supervisor, PIC, Selangor, 2025-01-02T10:30:00Z, ss_pic_sel_201
+RES_SEL_999, Ali Responder, Responder, Selangor, 2025-01-03T11:00:00Z, ss_res_sel_999
+
+=== SUMMARY_PROGRAMS ===
+id, name, location, date, time, state, status
+260501, Larian Amal resQ 2026, Dataran Merdeka, 15/05/2026, 07:00, Selangor, Active
+260610, Simulasi Kecemasan HQ, Stadium Shah Alam, 10/06/2026, 09:00, Selangor, Inactive
+
+=== SUMMARY_CASES ===
+id, programId, responderName, checkpoint, patientName, complaint, status, timestamp, latitude, longitude
+CASE_1001, 260501, Ali Responder, STATION A, Patient X, Sesak Nafas, Rujuk, 2026-05-15T08:30:00Z, 3.147, 101.693
+
+---
+Nota: Gunakan ID di atas untuk ujian Fast Access atau Log Masuk manual.
+Semua kata laluan default: password

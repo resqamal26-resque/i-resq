@@ -1,0 +1,7 @@
+{
+  "name": "resQ Amal i",
+  "description": "A comprehensive emergency response management system for volunteer responders and coordinators (MECC), integrating Google Sheets as a backend and Gemini AI for hospital referrals. and supabase db option ",
+  "requestFramePermissions": [
+    "geolocation"
+  ]
+}
