@@ -21,6 +21,7 @@ import {
 } from 'lucide-react';
 import { db } from '../../services/databaseService';
 import { googleSheetService } from '../../services/googleSheetService';
+import { supabaseService } from '../../services/supabaseService';
 import { Program, User, UserRole, Notification } from '../../types';
 import { MALAYSIAN_STATES } from '../../constants';
 import { formatMyDate } from '../../App';
@@ -52,7 +53,12 @@ const SettingsTab: React.FC<SettingsTabProps> = ({ user }) => {
   const [isNotifying, setIsNotifying] = useState(false);
   
   const defaultGasUrl = 'https://script.google.com/macros/s/AKfycbx1HIDERXBiz9A7D8hL7MaYNCgZqQqqzwqpWuyzwzXCvNkDuRvd0LWfvATfUWzLXB_1nA/exec';
+  const defaultSupabaseUrl = 'https://mwwoharllsaoiqbcbgpz.supabase.co';
+  const defaultSupabaseKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im13d29oYXJsbHNhb2lxYmNiZ3B6Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzMwMjU5NjAsImV4cCI6MjA4ODYwMTk2MH0.2L6rBfZHnLJOIVi39g66vP__xgWoW-PpgH45wLu0a4o';
+  
   const [gasUrl, setGasUrl] = useState(localStorage.getItem('resq_gas_url') || defaultGasUrl);
+  const [supabaseUrl, setSupabaseUrl] = useState(localStorage.getItem('resq_supabase_url') || defaultSupabaseUrl);
+  const [supabaseKey, setSupabaseKey] = useState(localStorage.getItem('resq_supabase_key') || defaultSupabaseKey);
 
   const [diagLoading, setDiagLoading] = useState(false);
   const [diagResults, setDiagResults] = useState<{
@@ -78,6 +84,12 @@ const SettingsTab: React.FC<SettingsTabProps> = ({ user }) => {
   const handleSaveGasUrl = () => {
     localStorage.setItem('resq_gas_url', gasUrl);
     alert('Konfigurasi Backend Berjaya Dikemaskini!');
+  };
+
+  const handleSaveSupabase = () => {
+    localStorage.setItem('resq_supabase_url', supabaseUrl);
+    localStorage.setItem('resq_supabase_key', supabaseKey);
+    alert('Konfigurasi Supabase Berjaya Dikemaskini!');
   };
 
   const handleTestNotification = async () => {
@@ -121,11 +133,14 @@ const SettingsTab: React.FC<SettingsTabProps> = ({ user }) => {
 
   const runDiagnostics = async () => {
     setDiagLoading(true);
-    const response = await googleSheetService.testConnection();
+    const gsResponse = await googleSheetService.testConnection();
+    const sbResponse = await supabaseService.testConnection();
+    
     setDiagResults({
-      connection: response.status === 'success' ? 'success' : 'error',
+      connection: (gsResponse.status === 'success' && sbResponse.status === 'success') ? 'success' : 'error',
       details: [
-        response.status === 'success' ? '✅ Sambungan Master Backend HQ: AKTIF' : '❌ Sambungan Master Backend HQ: GAGAL',
+        gsResponse.status === 'success' ? '✅ Sambungan Master Backend HQ (G-Sheets): AKTIF' : `❌ Sambungan Master Backend HQ (G-Sheets): GAGAL (${gsResponse.message || 'Ralat tidak diketahui'})`,
+        sbResponse.status === 'success' ? '✅ Sambungan Supabase Cloud: AKTIF' : `❌ Sambungan Supabase Cloud: GAGAL (${sbResponse.message || 'Ralat tidak diketahui'})`,
         `🕒 Latency: ${Math.floor(Math.random() * 200) + 50}ms`,
         `📡 Mirror Protocol: Ready`,
         `📦 Storage API: Connected`
@@ -316,6 +331,57 @@ const SettingsTab: React.FC<SettingsTabProps> = ({ user }) => {
             <div className="space-y-4">
               <input type="text" value={gasUrl} onChange={(e) => setGasUrl(e.target.value)} className="w-full px-6 py-5 rounded-2xl border border-slate-100 bg-slate-900 text-green-400 font-mono text-[10px] focus:ring-4 focus:ring-indigo-500/20 outline-none" />
               <button onClick={handleSaveGasUrl} className="px-8 py-4 bg-slate-900 text-white rounded-2xl font-black text-[10px] uppercase tracking-widest hover:bg-slate-800 transition-all shadow-lg border border-white/5 active:scale-95">Simpan Konfigurasi Backend</button>
+            </div>
+          </div>
+
+          <div className="bg-white rounded-[3rem] shadow-sm border border-slate-100 p-10">
+            <div className="flex items-center gap-4 mb-8">
+              <div className="p-3 bg-red-100 text-red-600 rounded-2xl">
+                 <CloudIcon className="w-6 h-6" />
+              </div>
+              <div>
+                <h3 className="text-xl font-black text-slate-800 uppercase tracking-tighter italic">Supabase Cloud Configuration</h3>
+                <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest">Database URL & Anon Key</p>
+              </div>
+            </div>
+            <div className="space-y-4">
+              <div className="space-y-1">
+                <label className="text-[8px] font-black text-slate-400 uppercase tracking-widest ml-1">Supabase URL</label>
+                <input 
+                  type="text" 
+                  value={supabaseUrl} 
+                  onChange={(e) => setSupabaseUrl(e.target.value)} 
+                  className="w-full px-6 py-4 rounded-xl border border-slate-100 bg-slate-50 font-mono text-[10px] focus:ring-4 focus:ring-red-500/10 outline-none" 
+                  placeholder="https://xyz.supabase.co"
+                />
+              </div>
+              <div className="space-y-1">
+                <label className="text-[8px] font-black text-slate-400 uppercase tracking-widest ml-1">Supabase Anon Key</label>
+                <input 
+                  type="password" 
+                  value={supabaseKey} 
+                  onChange={(e) => setSupabaseKey(e.target.value)} 
+                  className="w-full px-6 py-4 rounded-xl border border-slate-100 bg-slate-50 font-mono text-[10px] focus:ring-4 focus:ring-red-500/10 outline-none" 
+                  placeholder="eyJhbG..."
+                />
+              </div>
+              <div className="flex flex-wrap gap-4">
+                <button 
+                  onClick={handleSaveSupabase} 
+                  className="px-8 py-4 bg-red-600 text-white rounded-2xl font-black text-[10px] uppercase tracking-widest hover:bg-red-700 transition-all shadow-lg active:scale-95"
+                >
+                  Simpan Konfigurasi Supabase
+                </button>
+                <button 
+                  onClick={async () => {
+                    const res = await supabaseService.testConnection();
+                    alert(res.status === 'success' ? '✅ Sambungan Supabase Berjaya!' : `❌ Sambungan Supabase Gagal: ${res.message}`);
+                  }}
+                  className="px-8 py-4 bg-slate-900 text-white rounded-2xl font-black text-[10px] uppercase tracking-widest hover:bg-slate-800 transition-all shadow-lg border border-white/5 active:scale-95"
+                >
+                  Uji Sambungan Supabase
+                </button>
+              </div>
             </div>
           </div>
         </div>

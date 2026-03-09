@@ -110,6 +110,9 @@ const MeccLayout: React.FC<MeccLayoutProps> = ({ user, onLogout }) => {
   const fetchData = useCallback(async (isInitial = false) => {
     if (isInitial) setLoading(true);
     try {
+      // Sync from cloud first to get latest data for the state
+      await db.syncFromCloud(user.state);
+
       const programs = await db.getPrograms();
       const active = programs.find(p => p.status === 'Active' && (p.state === user.state || p.state === 'CENTER' || user.role === UserRole.MECC_HQ));
       

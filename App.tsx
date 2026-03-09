@@ -10,6 +10,7 @@ import TaskCheckIn from './components/responder/TaskCheckIn';
 import { User, UserRole, Attendance, Notification } from './types';
 import { db } from './services/databaseService';
 import { googleSheetService } from './services/googleSheetService';
+import { supabaseService } from './services/supabaseService';
 
 // Helper function for Malaysian Date Format (DD/MM/YYYY)
 export const formatMyDate = (dateInput: string | Date) => {
@@ -79,20 +80,24 @@ function AppContent() {
       
       localStorage.setItem('resq_session_logs', JSON.stringify([newEntry, ...history].slice(0, 100)));
 
-      // Sync Session to HQ Cloud
-      await googleSheetService.syncData(undefined, [{
+      // Sync Session to HQ Cloud (Respecting DB Config)
+      const config = db.getConfig();
+      const syncItems = [{
         type: 'sessions',
         payload: {
           id: sessionId,
           userId: userData.id,
           userName: userData.name,
           role: userData.role,
+          state: userData.state,
           action: action,
           entryTime: action === 'LOGIN' ? timestampMY : (sessionStartTime || ''),
           exitTime: action === 'LOGOUT' ? timestampMY : '',
           timestamp: timestampUTC
         }
-      }]);
+      }];
+
+      await db.syncToCloud(userData.spreadsheetId || '', syncItems);
     } catch (e) {
       console.error("Session Sync Error (Non-blocking):", e);
     }
@@ -151,21 +156,6 @@ function AppContent() {
         const updated = { ...activeTask, exitTime: exitTimeMY, remark: 'COMPLETED' };
         
         await db.updateAttendance(updated);
-        await googleSheetService.syncData(user.spreadsheetId, [{
-          type: 'attendance',
-          payload: {
-            id: updated.id,
-            responderId: updated.responderId,
-            responderName: updated.responderName,
-            programName: updated.programName,
-            checkpoint: updated.checkpoint,
-            entryTime: updated.entryTime,
-            exitTime: exitTimeMY, 
-            lat: updated.location.lat,
-            lng: updated.location.lng,
-            remark: 'COMPLETED'
-          }
-        }]);
 
         // Notify MECC
         const notification: Notification = {

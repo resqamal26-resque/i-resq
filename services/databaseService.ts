@@ -1,6 +1,7 @@
 
-import { User, UserRole, Program, Case, Attendance, Notification } from '../types';
+import { User, UserRole, Program, Case, Attendance, Notification, DatabaseConfig } from '../types';
 import { googleSheetService } from './googleSheetService';
+import { supabaseService } from './supabaseService';
 
 class DatabaseService {
   private getStorage<T>(key: string): T[] {
@@ -12,27 +13,103 @@ class DatabaseService {
     localStorage.setItem(`resq_${key}`, JSON.stringify(data));
   }
 
+  // Configuration
+  getConfig(): DatabaseConfig {
+    const stored = localStorage.getItem('resq_db_config');
+    if (stored) {
+      try {
+        return JSON.parse(stored);
+      } catch (e) {
+        console.error("Config parse error:", e);
+      }
+    }
+    
+    // Default to user provided Supabase config if no storage exists
+    const defaultSupabaseUrl = 'https://mwwoharllsaoiqbcbgpz.supabase.co';
+    const defaultSupabaseKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im13d29oYXJsbHNhb2lxYmNiZ3B6Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzMwMjU5NjAsImV4cCI6MjA4ODYwMTk2MH0.2L6rBfZHnLJOIVi39g66vP__xgWoW-PpgH45wLu0a4o';
+
+    return {
+      provider: 'supabase',
+      googlesheetUrl: localStorage.getItem('resq_gas_url') || undefined,
+      supabaseUrl: localStorage.getItem('resq_supabase_url') || defaultSupabaseUrl,
+      supabaseKey: localStorage.getItem('resq_supabase_key') || defaultSupabaseKey
+    };
+  }
+
+  updateConfig(config: DatabaseConfig): void {
+    localStorage.setItem('resq_db_config', JSON.stringify(config));
+    if (config.googlesheetUrl) localStorage.setItem('resq_gas_url', config.googlesheetUrl);
+    if (config.supabaseUrl) localStorage.setItem('resq_supabase_url', config.supabaseUrl);
+    if (config.supabaseKey) localStorage.setItem('resq_supabase_key', config.supabaseKey);
+  }
+
+  // Cloud Synchronization
+  async syncFromCloud(state: string): Promise<void> {
+    const config = this.getConfig();
+    if (config.provider === 'supabase') {
+      try {
+        const [cloudUsers, cloudPrograms, cloudCases, cloudAttendance] = await Promise.all([
+          supabaseService.getUsers(state),
+          supabaseService.getPrograms(state),
+          supabaseService.getCases(state),
+          supabaseService.getAttendance(state)
+        ]);
+
+        if (cloudUsers.length > 0) this.setStorage('users', cloudUsers);
+        if (cloudPrograms.length > 0) this.setStorage('programs', cloudPrograms);
+        if (cloudCases.length > 0) this.setStorage('cases', cloudCases);
+        if (cloudAttendance.length > 0) this.setStorage('attendance', cloudAttendance);
+      } catch (err) {
+        console.error("Supabase Sync From Cloud Error:", err);
+      }
+    }
+  }
+
+  async syncToCloud(spreadsheetId: string, items: { type: string, payload: any }[]): Promise<boolean> {
+    const config = this.getConfig();
+    if (config.provider === 'supabase') {
+      return await supabaseService.syncData(items);
+    } else {
+      return await googleSheetService.syncData(spreadsheetId, items);
+    }
+  }
+
+  private async autoSync(type: string, payload: any): Promise<boolean> {
+    try {
+      const userStr = localStorage.getItem('resq_user');
+      const spreadsheetId = userStr ? JSON.parse(userStr).spreadsheetId : '';
+      return await this.syncToCloud(spreadsheetId || '', [{ type, payload }]);
+    } catch (err) {
+      console.error(`Auto-sync failed for ${type}:`, err);
+      return false;
+    }
+  }
+
   // Users
   async getUsers(state?: string): Promise<User[]> {
     const users = this.getStorage<User>('users');
     return state ? users.filter(u => u.state === state) : users;
   }
 
-  async addUser(user: User): Promise<void> {
+  async addUser(user: User): Promise<boolean> {
     const users = this.getStorage<User>('users');
     if (!users.some(u => u.id === user.id)) {
       users.push(user);
       this.setStorage('users', users);
+      return await this.autoSync('users', user);
     }
+    return true;
   }
 
-  async updateUser(user: User): Promise<void> {
+  async updateUser(user: User): Promise<boolean> {
     const users = this.getStorage<User>('users');
     const index = users.findIndex(u => u.id === user.id);
     if (index !== -1) {
       users[index] = user;
       this.setStorage('users', users);
+      return await this.autoSync('users', user);
     }
+    return false;
   }
 
   // Programs
@@ -42,21 +119,25 @@ class DatabaseService {
     return programs.filter(p => p.state === state);
   }
 
-  async addProgram(program: Program): Promise<void> {
+  async addProgram(program: Program): Promise<boolean> {
     const programs = this.getStorage<Program>('programs');
     if (!programs.some(p => p.id === program.id)) {
       programs.push(program);
       this.setStorage('programs', programs);
+      return await this.autoSync('programs', program);
     }
+    return true;
   }
 
-  async updateProgram(program: Program): Promise<void> {
+  async updateProgram(program: Program): Promise<boolean> {
     const programs = this.getStorage<Program>('programs');
     const index = programs.findIndex(p => p.id === program.id);
     if (index !== -1) {
       programs[index] = program;
       this.setStorage('programs', programs);
+      return await this.autoSync('programs', program);
     }
+    return false;
   }
 
   // Cases
@@ -88,19 +169,22 @@ class DatabaseService {
     return `${prefix}-${nextNum}`;
   }
 
-  async addCase(newCase: Case): Promise<void> {
+  async addCase(newCase: Case): Promise<boolean> {
     const cases = this.getStorage<Case>('cases');
     cases.push(newCase);
     this.setStorage('cases', cases);
+    return await this.autoSync('cases', newCase);
   }
 
-  async updateCase(updatedCase: Case): Promise<void> {
+  async updateCase(updatedCase: Case): Promise<boolean> {
     const cases = this.getStorage<Case>('cases');
     const index = cases.findIndex(c => c.id === updatedCase.id);
     if (index !== -1) {
       cases[index] = updatedCase;
       this.setStorage('cases', cases);
+      return await this.autoSync('cases', updatedCase);
     }
+    return false;
   }
 
   // Attendance
@@ -109,19 +193,22 @@ class DatabaseService {
     return programId ? attendance.filter(a => a.programId === programId) : attendance;
   }
 
-  async addAttendance(record: Attendance): Promise<void> {
+  async addAttendance(record: Attendance): Promise<boolean> {
     const attendance = this.getStorage<Attendance>('attendance');
     attendance.push(record);
     this.setStorage('attendance', attendance);
+    return await this.autoSync('attendance', record);
   }
 
-  async updateAttendance(record: Attendance): Promise<void> {
+  async updateAttendance(record: Attendance): Promise<boolean> {
     const attendance = this.getStorage<Attendance>('attendance');
     const index = attendance.findIndex(a => a.id === record.id);
     if (index !== -1) {
       attendance[index] = record;
       this.setStorage('attendance', attendance);
+      return await this.autoSync('attendance', record);
     }
+    return false;
   }
 
   // Notifications
@@ -130,10 +217,11 @@ class DatabaseService {
     return programId ? notifications.filter(n => n.programId === programId) : notifications;
   }
 
-  async addNotification(notification: Notification): Promise<void> {
+  async addNotification(notification: Notification): Promise<boolean> {
     const notifications = this.getStorage<Notification>('notifications');
     notifications.unshift(notification);
     this.setStorage('notifications', notifications.slice(0, 100));
+    return await this.autoSync('notifications', notification);
   }
 
   /**

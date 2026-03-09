@@ -93,6 +93,9 @@ const ResponderLayout: React.FC<ResponderLayoutProps> = ({ user, onLogout, activ
   }, []);
 
   const fetchData = useCallback(async () => {
+    // Sync from cloud first to get latest data for the state
+    await db.syncFromCloud(user.state);
+
     const allCases = await db.getCases(activeTask.programId);
     const sessionCases = allCases.filter(c => c.responderName === user.name && c.programId === activeTask.programId);
     setCases(sessionCases);
@@ -134,7 +137,10 @@ const ResponderLayout: React.FC<ResponderLayoutProps> = ({ user, onLogout, activ
     const updatedUser: User = { ...user, name: profileName, state: profileState, assignment: profileAssignment };
     try {
       await db.updateUser(updatedUser);
-      await googleSheetService.registerUser(updatedUser);
+      await db.syncToCloud(user.spreadsheetId, [{
+        type: 'users',
+        payload: updatedUser
+      }]);
       showToast("Profil berjaya dikemaskini!", "success");
     } catch (err) {
       showToast("Gagal menyelaraskan profil ke cloud.", "info");
@@ -224,6 +230,10 @@ _Dihantar melalui Sistem resQ Amal_`;
           type: 'message'
         };
         await db.addNotification(notification);
+        await db.syncToCloud(user.spreadsheetId, [{
+          type: 'notifications',
+          payload: notification
+        }]);
         showToast("Mesej Kecemasan dihantar ke MECC!", "success");
       } catch (err) {
         showToast("Gagal menghantar mesej dalaman.", "info");

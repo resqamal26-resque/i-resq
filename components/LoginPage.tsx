@@ -19,11 +19,16 @@ import {
   MapPin,
   UserPlus,
   CheckCircle2,
-  Bell
+  Bell,
+  Settings,
+  Database,
+  Save,
+  X
 } from 'lucide-react';
 import { db } from '../services/databaseService';
 import { googleSheetService } from '../services/googleSheetService';
-import { User, UserRole } from '../types';
+import { supabaseService } from '../services/supabaseService';
+import { User, UserRole, DatabaseConfig } from '../types';
 import { MALAYSIAN_STATES } from '../constants';
 
 interface LoginPageProps {
@@ -46,6 +51,11 @@ const LoginPage: React.FC<LoginPageProps> = ({ onLogin }) => {
   
   // Connection Test States
   const [connStatus, setConnStatus] = useState<'idle' | 'checking' | 'online' | 'offline'>('idle');
+
+  // Database Settings Modal
+  const [isSettingsOpen, setIsSettingsOpen] = useState(false);
+  const [dbConfig, setDbConfig] = useState<DatabaseConfig>(db.getConfig());
+  const [isSavingConfig, setIsSavingConfig] = useState(false);
 
   const navigate = useNavigate();
 
@@ -85,10 +95,30 @@ const LoginPage: React.FC<LoginPageProps> = ({ onLogin }) => {
   const handleCheckConnection = async () => {
     setConnStatus('checking');
     try {
-      const result = await googleSheetService.testConnection();
+      const config = db.getConfig();
+      let result;
+      if (config.provider === 'supabase') {
+        result = await supabaseService.testConnection();
+      } else {
+        result = await googleSheetService.testConnection();
+      }
       setConnStatus(result.status === 'success' ? 'online' : 'offline');
     } catch {
       setConnStatus('offline');
+    }
+  };
+
+  const handleSaveConfig = async () => {
+    setIsSavingConfig(true);
+    try {
+      db.updateConfig(dbConfig);
+      showToast("Konfigurasi Pangkalan Data Dikemaskini!", "success");
+      setIsSettingsOpen(false);
+      handleCheckConnection();
+    } catch (err) {
+      setError("Gagal menyimpan konfigurasi.");
+    } finally {
+      setIsSavingConfig(false);
     }
   };
 
@@ -226,6 +256,15 @@ const LoginPage: React.FC<LoginPageProps> = ({ onLogin }) => {
       <div className="absolute top-[-10%] left-[-10%] w-[50%] h-[50%] bg-red-600/10 rounded-full blur-[100px]"></div>
       <div className="absolute bottom-[-10%] right-[-10%] w-[50%] h-[50%] bg-indigo-900/10 rounded-full blur-[100px]"></div>
       
+      {/* Admin Settings Trigger */}
+      <button 
+        onClick={() => setIsSettingsOpen(true)}
+        className="absolute top-6 right-6 p-3 bg-white/5 hover:bg-white/10 border border-white/10 rounded-2xl text-white/40 hover:text-white transition-all z-50 group"
+        title="Admin Database Setup"
+      >
+        <Settings className="w-5 h-5 group-hover:rotate-90 transition-transform duration-500" />
+      </button>
+
       <div className="max-w-md w-full flex flex-col gap-4 relative z-10">
         {/* Simulation Buttons */}
         <div className="grid grid-cols-2 gap-3">
@@ -418,10 +457,114 @@ const LoginPage: React.FC<LoginPageProps> = ({ onLogin }) => {
         <div className="flex justify-center gap-4">
            <div className={`flex items-center gap-2 px-3 py-1.5 rounded-full text-[8px] font-black uppercase tracking-widest ${connStatus === 'online' ? 'bg-green-100 text-green-700' : 'bg-slate-800 text-slate-500'}`}>
               {connStatus === 'online' ? <Wifi className="w-3 h-3" /> : <WifiOff className="w-3 h-3" />}
-              {connStatus === 'online' ? 'Master HQ Online' : 'Cloud Sync Pending'}
+              {connStatus === 'online' ? (db.getConfig().provider === 'supabase' ? 'Supabase Cloud Online' : 'Master HQ Online') : 'Cloud Sync Pending'}
            </div>
         </div>
       </div>
+
+      {/* Database Setup Modal */}
+      {isSettingsOpen && (
+        <div className="fixed inset-0 z-[300] flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-sm animate-in fade-in duration-300">
+          <div className="bg-white w-full max-w-md rounded-[2.5rem] shadow-2xl overflow-hidden animate-in zoom-in-95 duration-300">
+            <div className="bg-slate-900 p-8 text-white flex justify-between items-center">
+              <div className="flex items-center gap-3">
+                <div className="p-2 bg-indigo-600 rounded-xl">
+                  <Database className="w-5 h-5" />
+                </div>
+                <div>
+                  <h2 className="text-lg font-black uppercase tracking-tight">Database Setup</h2>
+                  <p className="text-[9px] text-slate-400 font-bold uppercase tracking-widest">Admin Configuration Only</p>
+                </div>
+              </div>
+              <button 
+                onClick={() => setIsSettingsOpen(false)}
+                className="p-2 hover:bg-white/10 rounded-xl transition-all"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <div className="p-8 space-y-6">
+              <div className="space-y-3">
+                <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Pilih Provider Utama</label>
+                <div className="grid grid-cols-2 gap-3">
+                  <button
+                    onClick={() => setDbConfig({ ...dbConfig, provider: 'googlesheet' })}
+                    className={`py-4 rounded-2xl border-2 transition-all flex flex-col items-center gap-1 ${
+                      dbConfig.provider === 'googlesheet' 
+                        ? 'border-red-600 bg-red-50 text-red-600' 
+                        : 'border-slate-100 bg-slate-50 text-slate-400 grayscale'
+                    }`}
+                  >
+                    <Globe className="w-5 h-5" />
+                    <span className="text-[10px] font-black uppercase">Google Sheet</span>
+                  </button>
+                  <button
+                    onClick={() => setDbConfig({ ...dbConfig, provider: 'supabase' })}
+                    className={`py-4 rounded-2xl border-2 transition-all flex flex-col items-center gap-1 ${
+                      dbConfig.provider === 'supabase' 
+                        ? 'border-indigo-600 bg-indigo-50 text-indigo-600' 
+                        : 'border-slate-100 bg-slate-50 text-slate-400 grayscale'
+                    }`}
+                  >
+                    <Zap className="w-5 h-5" />
+                    <span className="text-[10px] font-black uppercase">Supabase</span>
+                  </button>
+                </div>
+              </div>
+
+              {dbConfig.provider === 'googlesheet' ? (
+                <div className="space-y-2">
+                  <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Google App Script URL</label>
+                  <textarea
+                    value={dbConfig.googlesheetUrl || ''}
+                    onChange={(e) => setDbConfig({ ...dbConfig, googlesheetUrl: e.target.value })}
+                    className="w-full px-5 py-4 bg-slate-50 border border-slate-100 rounded-2xl focus:ring-4 focus:ring-red-500/10 outline-none font-bold text-slate-800 text-xs h-24 resize-none"
+                    placeholder="https://script.google.com/macros/s/.../exec"
+                  />
+                </div>
+              ) : (
+                <div className="space-y-4">
+                  <div className="space-y-2">
+                    <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Supabase Project URL</label>
+                    <input
+                      type="text"
+                      value={dbConfig.supabaseUrl || ''}
+                      onChange={(e) => setDbConfig({ ...dbConfig, supabaseUrl: e.target.value })}
+                      className="w-full px-5 py-4 bg-slate-50 border border-slate-100 rounded-2xl focus:ring-4 focus:ring-indigo-500/10 outline-none font-bold text-slate-800 text-xs"
+                      placeholder="https://xyz.supabase.co"
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Supabase Anon Key</label>
+                    <input
+                      type="password"
+                      value={dbConfig.supabaseKey || ''}
+                      onChange={(e) => setDbConfig({ ...dbConfig, supabaseKey: e.target.value })}
+                      className="w-full px-5 py-4 bg-slate-50 border border-slate-100 rounded-2xl focus:ring-4 focus:ring-indigo-500/10 outline-none font-bold text-slate-800 text-xs"
+                      placeholder="eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
+                    />
+                  </div>
+                </div>
+              )}
+
+              <div className="pt-4">
+                <button
+                  onClick={handleSaveConfig}
+                  disabled={isSavingConfig}
+                  className="w-full bg-slate-900 text-white font-black py-5 rounded-2xl shadow-xl flex items-center justify-center gap-3 hover:bg-slate-800 transition-all active:scale-95"
+                >
+                  {isSavingConfig ? <Loader2 className="w-5 h-5 animate-spin" /> : <Save className="w-5 h-5" />}
+                  SIMPAN KONFIGURASI
+                </button>
+                <p className="text-center mt-4 text-[9px] font-bold text-slate-400 uppercase tracking-widest">
+                  Perubahan akan memberi kesan kepada penyelarasan awan secara langsung.
+                </p>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

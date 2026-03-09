@@ -119,3 +119,10 @@ export interface Hospital {
   distance?: string;
   type: 'Hospital' | 'Clinic';
 }
+
+export interface DatabaseConfig {
+  provider: 'googlesheet' | 'supabase';
+  googlesheetUrl?: string;
+  supabaseUrl?: string;
+  supabaseKey?: string;
+}

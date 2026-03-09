@@ -73,9 +73,9 @@ const ProgramManagement: React.FC<ProgramManagementProps> = ({ user }) => {
   };
 
   const handleResyncProgram = async (program: Program) => {
-    setSyncStatus(prev => ({ ...prev, [program.id]: 'pending' }));
     try {
-      const success = await googleSheetService.syncData(user.spreadsheetId, [{
+      setSyncStatus(prev => ({ ...prev, [program.id]: 'pending' }));
+      const success = await db.syncToCloud(user.spreadsheetId, [{
         type: 'programs',
         payload: { ...program }
       }]);
@@ -120,14 +120,8 @@ const ProgramManagement: React.FC<ProgramManagementProps> = ({ user }) => {
     setSyncStatus(prev => ({ ...prev, [id]: 'pending' }));
 
     try {
-      // 1. Save Locally first
-      await db.addProgram(newProgram);
-      
-      // 2. Mirror to Cloud and check success
-      const success = await googleSheetService.syncData(user.spreadsheetId, [{
-        type: 'programs',
-        payload: { ...newProgram }
-      }]);
+      // 1. Save Locally & Sync to Cloud (via autoSync)
+      const success = await db.addProgram(newProgram);
 
       if (success) {
         setSyncStatus(prev => ({ ...prev, [id]: 'synced' }));
@@ -153,11 +147,7 @@ const ProgramManagement: React.FC<ProgramManagementProps> = ({ user }) => {
       setIsSubmitting(true);
       setSyncStatus(prev => ({ ...prev, [editingProgram.id]: 'pending' }));
       try {
-        await db.updateProgram(editingProgram);
-        const success = await googleSheetService.syncData(user.spreadsheetId, [{
-          type: 'programs',
-          payload: { ...editingProgram }
-        }]);
+        const success = await db.updateProgram(editingProgram);
         
         if (success) {
           setSyncStatus(prev => ({ ...prev, [editingProgram.id]: 'synced' }));
@@ -206,7 +196,7 @@ const ProgramManagement: React.FC<ProgramManagementProps> = ({ user }) => {
         await db.updateProgram(prog);
       }
       
-      const success = syncItems.length > 0 ? await googleSheetService.syncData(user.spreadsheetId, syncItems) : true;
+      const success = syncItems.length > 0 ? await db.syncToCloud(user.spreadsheetId, syncItems) : true;
       
       if (success) {
         setSyncStatus(prev => ({ ...prev, [programId]: 'synced' }));

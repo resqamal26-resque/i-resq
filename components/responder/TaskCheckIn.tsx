@@ -82,27 +82,16 @@ const TaskCheckIn: React.FC<TaskCheckInProps> = ({ user, onTaskLogin, onLogout }
     else setIsLoading(true);
 
     try {
-      let activePrograms: Program[] = [];
       const targetState = programLevelMode === 'Pusat' ? 'CENTER' : user.state;
       
       if (forceCloud) {
         // Pull fresh data from Master HQ for the selected target state/center
-        const cloudData = await googleSheetService.fetchProgramsByState(targetState);
-        // Update local DB with fresh data
-        for (const p of cloudData) {
-          const existing = await db.getPrograms();
-          if (!existing.some(ep => ep.id === p.id)) {
-            await db.addProgram(p);
-          } else {
-            await db.updateProgram(p);
-          }
-        }
-        activePrograms = cloudData.filter(p => p.status === 'Active');
-      } else {
-        // Load from local
-        const localData = await db.getPrograms(targetState);
-        activePrograms = localData.filter(p => p.status === 'Active');
+        await db.syncFromCloud(targetState);
       }
+      
+      // Load from local (which is now synced if forceCloud was true)
+      const localData = await db.getPrograms(targetState);
+      const activePrograms = localData.filter(p => p.status === 'Active');
 
       setPrograms(activePrograms);
       setSelectedProgramId(''); // Reset selection when level changes
@@ -219,28 +208,11 @@ const TaskCheckIn: React.FC<TaskCheckInProps> = ({ user, onTaskLogin, onLogout }
       };
       await db.addNotification(notification);
 
-      // 3. Cloud Sync
-      await googleSheetService.syncData(user.spreadsheetId, [{
-        type: 'attendance',
-        payload: {
-          id: pendingAttendance.id,
-          responderId: pendingAttendance.responderId,
-          responderName: pendingAttendance.responderName,
-          programName: pendingAttendance.programName,
-          checkpoint: pendingAttendance.checkpoint,
-          entryTime: pendingAttendance.entryTime,
-          exitTime: '', 
-          lat: pendingAttendance.location.lat,
-          lng: pendingAttendance.location.lng,
-          remark: 'ACTIVE'
-        }
-      }]);
-
       onTaskLogin(pendingAttendance);
       showToast("Check-in Berjaya!", "success");
       setShowSuccessPopup(true);
     } catch (err) {
-      console.error("Cloud Sync Failed:", err);
+      console.error("Check-in Failed:", err);
       onTaskLogin(pendingAttendance);
       showToast("Check-in Berjaya (Offline Mode)", "info");
       setShowSuccessPopup(true);
@@ -267,17 +239,6 @@ const TaskCheckIn: React.FC<TaskCheckInProps> = ({ user, onTaskLogin, onLogout }
 
       await db.updateAttendance(updatedAttendance);
       
-      // Update cloud if possible
-      googleSheetService.syncData(user.spreadsheetId, [{
-        type: 'attendance',
-        payload: {
-          id: updatedAttendance.id,
-          expectedExitTime: updatedAttendance.expectedExitTime,
-          remark: updatedAttendance.remark,
-          entryTime: updatedAttendance.entryTime
-        }
-      }]).catch(e => console.error("Cloud update failed", e));
-
       setSubmittedAttendance(updatedAttendance);
       setShowAttendanceForm(false);
       setShowSharePopup(true);

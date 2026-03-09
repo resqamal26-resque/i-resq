@@ -143,33 +143,6 @@ _Dihantar melalui resQ Amal System_
       await db.addNotification(notification);
     }
 
-    try {
-      await googleSheetService.syncData(user.spreadsheetId, [{
-        type: 'cases',
-        payload: {
-          id: finalCaseData.id,
-          programId: finalCaseData.programId,
-          state: finalCaseData.state,
-          responderName: finalCaseData.responderName,
-          checkpoint: finalCaseData.checkpoint,
-          patientName: finalCaseData.patientName,
-          complaint: finalCaseData.complaint,
-          bp: finalCaseData.bp,
-          pr: finalCaseData.pr,
-          temp: finalCaseData.temp,
-          dxt: finalCaseData.dxt,
-          treatment: finalCaseData.treatment,
-          status: finalCaseData.status,
-          timestamp: finalCaseData.timestamp,
-          latitude: finalCaseData.latitude,
-          longitude: finalCaseData.longitude,
-          remark: finalCaseData.remark
-        }
-      }]);
-    } catch (err) {
-      console.error("Cloud Sync Error:", err);
-    }
-    
     setLastSavedCase(finalCaseData);
     setIsSubmitting(false);
     showToast(initialData ? "Laporan dikemaskini!" : "Laporan berjaya dihantar!", "success");
